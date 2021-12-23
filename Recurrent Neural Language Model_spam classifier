@@ -1,0 +1,53 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import SimpleRNN, Embedding, Dense
+from tensorflow.keras.models import Sequential
+
+
+data = pd.read_csv("spam.csv")
+
+# 데이터 전처리
+
+for i in range(2, 5):
+    del data["Unnamed: %d" % i]
+
+data["v1"] = data["v1"].replace(["ham", "spam"], [0, 1]) # spam이면 1 아니면 0
+
+# 중복 데이터 삭제
+data.drop_duplicates(subset=["v2"], inplace=True)
+
+# 데이터 split
+X_data = data["v2"]
+Y_data = data["v1"]
+X_train, X_test, Y_train, Y_test = train_test_split(X_data, Y_data, test_size=0.2, random_state=0, stratify=Y_data)
+
+# text preprocessing
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(X_train)
+# integer encoding
+X_train_encoded = tokenizer.texts_to_sequences(X_train)
+
+word_to_index = tokenizer.word_index
+
+max_len = 189
+vocab_size = len(word_to_index) + 1
+
+X_train_padded = pad_sequences(X_train_encoded, maxlen=max_len)
+
+# 모델 작성
+model = Sequential()
+model.add(Embedding(vocab_size, 32))  # 임베딩 벡터의 차원은 32
+model.add(SimpleRNN(32))
+model.add(Dense(1, activation="sigmoid"))
+
+model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["acc"])
+history = model.fit(X_train_padded, Y_train, epochs=4, batch_size=64, validation_split=0.2)
+
+X_test_encoded = tokenizer.texts_to_sequences(X_test)
+X_test_padded = pad_sequences(X_test_encoded, maxlen=max_len)
+
+print("accuracy : %.4f" % (model.evaluate(X_test_padded, Y_test)[1]))
+
+print(history.history["loss"])
