@@ -1,0 +1,56 @@
+import networkx as nx
+import numpy as np
+import matplotlib.pyplot as plt
+G = nx.Graph()
+G.add_node('a')
+G.add_node('b')
+G.add_node('c')
+G.add_node('x')
+G.add_node('y')
+G.add_node('z')
+G.add_edges_from([
+    ('a', 'b'), ('b', 'c'), ('a', 'c'), ('c', 'x'),
+    ('x', 'y'), ('y', 'z'), ('x', 'z')
+])
+
+nx.draw(G, with_labels=True)
+plt.show()
+
+
+def find(graph, previous, current):
+    probability = {}
+    for node in graph.neighbors(current):
+        probability[node] = 1
+
+    probability_sum = sum(probability.values())
+    probability = {i: j / probability_sum for i, j in probability.items()}
+
+    k = [i for i in probability.keys()]
+    v = [i for i in probability.values()]
+
+    next_node = np.random.choice(a=k, p=v)
+
+    return next_node
+def random_walk(graph, step, length):
+    answer_path = []
+
+    for i in range(step):
+        path = [np.random.choice(G.nodes())]
+
+        next_node = find(G, None, path[-1])
+        path.append(next_node)
+
+        for j in range(2, length):
+            next_node = find(G, path[-2], path[-1])
+            path.append(next_node)
+
+        answer_path.append(path)
+
+
+    return answer_path
+
+
+random_walk_value = random_walk(G, 10, 10)
+
+for i in random_walk_value:
+    print(i)
