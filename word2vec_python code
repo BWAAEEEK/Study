@@ -1,0 +1,158 @@
+from lxml import etree
+import re
+from nltk.tokenize import word_tokenize, sent_tokenize
+import numpy as np
+from collections import defaultdict
+
+
+class word2vec():
+    def __init__(self, setting_n, setting_lr, setting_epochs, settings_window):
+        self.n = setting_n
+        self.lr = setting_lr
+        self.epochs = setting_epochs
+        self.window = settings_window
+
+    def training_data(self, corpus):
+        word_count = defaultdict(int)
+        for row in corpus:
+            for word in row:
+                word_count[word] += 1
+
+        self.v_count = len(word_count.keys())
+        self.word_list = list(word_count.keys())
+
+        self.word_index = dict((word, i) for i, word in enumerate(self.word_list))
+        self.index_word = dict((i, word) for i, word in enumerate(self.word_list))
+
+        train_data = list()
+
+        for sentence in corpus:
+            sent_len = len(sentence)
+
+            for i, word in enumerate(sentence):
+                w_target = self.word2onehot(sentence[i])
+
+                w_context = list()
+
+                # window 설정 범위로 세팅 (window :3 -> 범위: 7 = 3 * 2 + 1)
+                for j in range(i - self.window, i + self.window + 1):
+                    if (j != i and j <= sent_len - 1 and j >= 0):
+                        w_context.append(self.word2onehot(sentence[j]))
+
+                train_data.append([w_target, w_context])
+
+        return np.array(train_data)
+
+    # one-hot encoding 해주는 method
+    def word2onehot(self, word):
+        word_vec = [0 for i in range(0, self.v_count)]
+        word_index = self.word_index[word]
+
+        word_vec[word_index] = 1
+
+        return word_vec
+
+    def train(self, train_data):
+        # 가중치 random 으로 설정
+        self.w1 = np.random.uniform(-1, 1, (self.v_count, self.n))
+        self.w2 = np.random.uniform(-1, 1, (self.n, self.v_count))
+
+        for i in range(self.epochs):
+            self.loss = 0
+
+            for target, context in train_data:
+                y_pred, h, u = self.calc(target)
+
+                # 에러 계산
+                error = np.sum([np.subtract(y_pred, word) for word in context], axis=0)
+
+                # 역전파
+                self.backprop(error, h, target)
+
+                # loss 계산
+                self.loss += -np.sum(u[word.index(1)] for word in context) + len(context) * np.log(np.sum(np.exp(u)))
+            print("Epoch :", i, "Loss :", self.loss)
+
+    def calc(self, value):
+        h = np.dot(self.w1.T, value)
+
+        u = np.dot(self.w2.T, h)
+
+        y = self.softmax(u)
+
+        return y, h, u
+
+    # softmax 함수
+    def softmax(self, x):
+        return np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum(axis=0)
+
+    # 역전파 구현
+    def backprop(self, e, h, x):
+
+        # 가중치 업데이트
+        dl_dw1 = np.outer(x, np.dot(self.w2, e.T))
+        dl_dw2 = np.outer(h, e)
+
+        # SGD
+        self.w1 = self.w1 - (self.lr * dl_dw1)
+        self.w2 = self.w2 - (self.lr * dl_dw2)
+
+    def w_vector(self, word):
+        w_index = self.word_index[word]
+        vector_w = self.w1[w_index]
+
+        return vector_w
+
+    def similarity(self, word):
+        vec_w1 = self.w_vector(word)
+        word_sim = dict()
+
+        for i in range(self.v_count):
+            vec_w2 = self.w1[i]
+
+            theta_sum = np.dot(vec_w1, vec_w2)
+            theta_den = np.linalg.norm(vec_w1) * np.linalg.norm(vec_w2)
+            theta = theta_sum / theta_den
+
+            word = self.index_word[i]
+            word_sim[word] = theta
+
+        word_sort = sorted(word_sim.items(), key=lambda x: x[1], reverse=True)
+
+        for word, sim in word_sort:
+            print(word, sim)
+
+# data preprocessing
+
+target_XML = open("ted_en-20160408.xml", "r", encoding="UTF8")
+target_text = etree.parse(target_XML)
+
+# <content> </content> 사이의 내용만 추출
+
+parse_text = "\n".join(target_text.xpath("//content/text()"))
+
+# 쓸데 없는 부분들 제거
+content_text = re.sub(r'\([^)]*\)', '', parse_text)
+
+sent_text = sent_tokenize(content_text)
+normalized_text = []
+for string in sent_text:
+    tokens = re.sub(r"[^a-z0-9]+", " ", string.lower())
+    normalized_text.append(tokens)
+
+
+result = [word_tokenize(sentence) for sentence in normalized_text]
+
+# __init__(dimension, learning_rate, epochs, window)
+model = word2vec(10, 0.01, 100, 2)
+
+
+train_data = model.training_data(result[:10])
+
+model.train(train_data)
+
+vector = model.w_vector("fantastic")
+
+print(vector)
+model.similarity("fantastic")
+
